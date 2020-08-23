@@ -47,6 +47,14 @@ agg_calculations <- function(data) {
 
 #Overall Descriptive Statistics
 data_calculations <- data %>%
+  summarise(date, cases, deaths) %>%
+  mutate(date = as.Date(date)) %>%
+  #group_by(date) %>%
+  mutate(lag_cases = lag(cases))%>%
+  mutate(daily_cases = cases - lag_cases) %>%
+  mutate(lag_deaths = lag(deaths)) %>%
+  mutate(daily_deaths = deaths - lag_deaths) %>%
+  select(-lag_cases, -lag_deaths) %>%
   dplyr::summarise(
     First_Case = min(date, na.rm = T),
     Last_Case = max(date, na.rm = T),
@@ -417,15 +425,9 @@ comparison <- data.frame('Metrics' = c('MSE', 'RMSE', 'MAE'),
 ################################
 
 
-
-#lubridate::date(data$date)
-#TO-DO: 
-#1. Get Daily State by State Increase for top 5 states (cum cases, deaths) -- OK
-#2. Get Monthly State by State Increase
-#3. Get Daily County by County Increase
-#4. Get Monthly County by County Increase
-#5. Get 90 Day window period frame State by State Increase
-
+##################################
+#Additional: EDA of Data
+##################################
 #Get top 5 states with highest cum cases of COVID19
 state_cases <- data %>%
   select(-county, -fips) %>%
@@ -465,80 +467,5 @@ plot_daily_cases <- daily_cases
 ggplot(data = plot_daily_cases, 
         aes(x = date, y = daily_case)) + 
   geom_line() +
-  geom_point()
-
-#Plot Daily cumulative increase of COVID19 for California
-plot_ca_daily_cases <- daily_cases %>% 
-  select(-fips, -county) %>%
-  group_by(state) %>%
-  filter(state == "California") %>%
-#  filter(state == "New York") %>%
-  glimpse
-
-#Plot Daily cumulative increase of C19 for New York
-plot_ny_daily_cases <- daily_cases %>% 
-  select(-fips, -county) %>%
-  group_by(state) %>%
-#  filter(state == "California") %>%
-  filter(state == "New York") %>%
-  glimpse
-
-#Plot Daily cumulative increase of C19 for Illinois
-plot_il_daily_cases <- daily_cases %>% 
-  select(-fips, -county) %>%
-  group_by(state) %>%
-  #  filter(state == "California") %>%
-  filter(state == "Illinois") %>%
-  glimpse
-
-#Plot Daily cumulative increase of C19 for New Jersey
-plot_nj_daily_cases <- daily_cases %>% 
-  select(-fips, -county) %>%
-  group_by(state) %>%
-  #  filter(state == "California") %>%
-  filter(state == "New Jersey") %>%
-  glimpse
-
-#Plot Daily cumulative increase of C19 for Texas
-plot_tx_daily_cases <- daily_cases %>% 
-  select(-fips, -county) %>%
-  group_by(state) %>%
-  #  filter(state == "California") %>%
-  filter(state == "Texas") %>%
-  glimpse
-
-
-#Plot top 5 states' cumulative increase of C19 by date
-ggplot() +
-  geom_line(data = plot_ca_daily_cases, aes(x = date, y = daily_case), color = "blue") +
-  geom_line(data = plot_il_daily_cases, aes(x = date, y = daily_case), color = "orange") +
-  geom_line(data = plot_nj_daily_cases, aes(x = date, y = daily_case), color = "green") +
-  geom_line(data = plot_ny_daily_cases, aes(x = date, y = daily_case), color = "red") + 
-  geom_line(data = plot_tx_daily_cases, aes(x = date, y = daily_case), color = "yellow") +
-  xlab('Date') +
-  ylab('Cum. Daily Cases')
-
-
-plot_state_cum_daily_cases <- plot_ca_daily_cases %>%
-  select(date, state, daily_case) %>%
-  mutate(state1 = "CA") %>%
-  bind_rows(plot_il_daily_cases %>%
-              select(date, state, daily_case) %>%
-              mutate(state1 = "IL")) %>%
-  bind_rows(plot_nj_daily_cases %>%
-              select(date, state, daily_case) %>%
-              mutate(state1 = "NJ")) %>%
-  bind_rows(plot_ny_daily_cases %>%
-              select(date, state, daily_case) %>%
-              mutate(state1 = "NY")) %>%
-  bind_rows(plot_tx_daily_cases %>%
-              select(date, state, daily_case) %>%
-              mutate(state1 = "TX")) %>%
-  glimpse
-
-ggplot(data = subset(plot_state_cum_daily_cases, date > as.Date('2020-02-28')),
-       aes(x = date, y = daily_case, color = state1, fill = state1)) +
-  geom_line() +
-  ggtitle("Top 5 States Cum. Daily Cases") +
   geom_point()
 
