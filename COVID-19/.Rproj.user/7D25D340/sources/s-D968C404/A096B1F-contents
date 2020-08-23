@@ -1,0 +1,102 @@
+# MGMTMSA 408, Operations Analytics
+# Lecture 2: Logistic Regression
+# In-class example on variable selection using Framingham data.
+
+####### HEURISTIC FOR MODEL SELECTION ######
+
+# To make this script self-contained, let's load the data
+# and split it again:
+
+setwd("~//Dropbox/MSBA408_2019_Material/lectures/Lecture2_Logistic/")
+framingham = read.csv("framingham.csv")
+
+framingham$education = as.factor(framingham$education)
+
+library(caTools)
+set.seed(88)
+spl = sample.split(framingham$TenYearCHD, SplitRatio = 0.65)
+framingham.train = framingham[spl,]
+framingham.test = framingham[!spl,]
+
+# Fit the model with all of the variables
+framingham.glm = glm(TenYearCHD ~ ., data = framingham.train, family = "binomial")
+# Inspect it 
+summary(framingham.glm)
+# AIC: 1807.8
+# heartRate has highest p-value, so let's remove it.
+# R provides a nice shortcut for cutting variables from a formula,
+# using -:
+framingham.glm = glm(TenYearCHD ~ . - heartRate, data = framingham.train, family = "binomial")
+# Inspect:
+summary(framingham.glm)
+# AIC: 1805.8
+# prevalentStroke now has highest p-value
+
+framingham.glm = glm(TenYearCHD ~ . - heartRate - prevalentStroke, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1803.8
+# diabetes has highest p-value
+
+framingham.glm = glm(TenYearCHD ~ . - heartRate - prevalentStroke - diabetes, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1801.8
+# currentSmoker has highest p-value
+
+framingham.glm = glm(TenYearCHD ~ . - heartRate - prevalentStroke - diabetes - currentSmoker, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1800.4
+# BMI has highest p-value
+
+framingham.glm = glm(TenYearCHD ~ . - heartRate - prevalentStroke - diabetes - currentSmoker - BMI, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1799.1
+# The three levels of education variable have highest p-value.
+
+framingham.glm = glm(TenYearCHD ~ . - prevalentStroke - heartRate - diabetes - currentSmoker - BMI - education, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1794.5
+# diaBP has highest p-value
+
+framingham.glm = glm(TenYearCHD ~ . - prevalentStroke - heartRate - diabetes - currentSmoker - BMI - education - diaBP, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1794.5 (we'll keep going)
+# totChol has highest p-value
+
+framingham.glm = glm(TenYearCHD ~ . - prevalentStroke - heartRate - diabetes - currentSmoker - BMI - education - diaBP - totChol, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+# AIC: 1795.7
+# Stop here -- AIC has gone up.
+# Final model:
+framingham.glm = glm(TenYearCHD ~ male + age + cigsPerDay + BPMeds + prevalentHyp + totChol + sysBP + glucose, data = framingham.train, family = "binomial")
+summary(framingham.glm)
+
+
+
+
+
+######## STEPWISE SELECTION ########
+
+# First, estimate the full model:
+framingham.glm = glm(TenYearCHD ~ ., data = framingham.train, family = "binomial")
+
+# Now run step().
+# By default, step() will do backward selection from the full model.
+framingham.glm.step = step(framingham.glm)
+
+# Inspect the model:
+summary(framingham.glm.step)
+# As it turns out, we got the same model as our heuristic,
+# but with much less work.
+
+# Let's try forward selection.
+# This is a bit more involved than backward selection --
+# have to specify the range of models to search in. 
+framingham.glm.full = glm(TenYearCHD ~ ., data = framingham.train, family = "binomial")
+framingham.glm.empty = glm(TenYearCHD ~ 1, data = framingham.train, family = "binomial")
+
+framingham.glm.step = step(framingham.glm.empty, scope = list(lower = framingham.glm.empty, upper = framingham.glm.full), direction = "forward")
+
+# Inspect the model:
+summary(framingham.glm.step)
+# Same model again! 
+

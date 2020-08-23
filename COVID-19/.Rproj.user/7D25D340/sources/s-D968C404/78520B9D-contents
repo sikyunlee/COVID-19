@@ -9,6 +9,13 @@ library(tidyverse)
 library(ggplot2)
 library(highcharter)
 library(lubridate)
+library(prophet)
+library(RCurl)
+library(ModelMetrics)
+library(caTools)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
 
 #' 
 #' 
@@ -261,6 +268,154 @@ plot(trained_model)
 #table(y_test, cases)
 
 #For another solution, let's try Prophet package created by FB data Science team
+
+##########
+#Trying Prophet Functions
+##########
+us_data <- data %>%
+  mutate(date = as.Date(date)) %>%
+  select(date, cases, deaths) %>%
+  group_by(date) %>%
+  summarise(cum_cases = sum(cases, na.rm = T),
+            cum_deaths = sum(deaths, na.rm = T)) %>%
+  mutate(lag_cases = lag(cum_cases)) %>%
+  mutate(daily_cases = cum_cases - lag_cases) %>%
+  mutate(lag_deaths = lag(cum_deaths)) %>%
+  mutate(daily_deaths = cum_deaths - lag_deaths) %>%
+  select(-lag_cases, -lag_deaths) %>%
+  arrange(date) %>%
+  glimpse
+
+#Predicting daily cases into the future
+#install.packages('prophet')
+#library('prophet')
+df <- us_data %>%
+  mutate(ds = date) %>%
+  mutate(y = daily_cases) %>%
+  select(ds, y) %>%
+  glimpse
+
+#create model for training
+m <- prophet(df)
+
+#set number of days to predict; in this case 31 days
+future <- make_future_dataframe(m, periods = 31)
+tail(future) #to check up to when this will predict; in this case, 8/21
+
+#predict using the predict function
+forecast <- predict(m, future)
+#show the tail of the predicted number --> yhat
+#along with predicted intervals in yhat_lower, yhat_upper
+tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+
+plot(m, forecast)
+
+#Output: plot predicted daliy cases
+#ggplot(data = forecast,
+#       aes(x = ds, y = yhat)) + 
+#  geom_line() +
+#  theme_minimal() + 
+#  geom_point()
+
+#Break down the forecast by trend, weekly seasonality
+prophet_plot_components(m, forecast)
+
+#Interactive plot of the forecast
+dyplot.prophet(m, forecast)
+
+predicted <- forecast %>%
+  select(ds, yhat) %>%
+  glimpse
+
+#Let's test our predicted values to the actual ones in NYtimes data
+#Get the URL and load into R
+url <- 'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv'
+new_data <- read.csv(url)
+
+#Munge the data in to the data format above
+new_df <- new_data %>%
+  mutate(data = as.Date(date)) %>%
+  select(date, cases, deaths) %>%
+  select(date, cases, deaths) %>%
+  group_by(date) %>%
+  summarise(cum_cases = sum(cases, na.rm=T),
+            cum_deaths = sum(deaths, na.rm = T)) %>%
+  mutate(lag_cases = lag(cum_cases)) %>%
+  mutate(daily_cases = cum_cases- lag_cases) %>%
+  mutate(lag_deaths = lag(cum_deaths)) %>%
+  mutate(daily_deaths = cum_deaths - lag_deaths) %>%
+  select(-lag_cases, -lag_deaths) %>%
+  arrange(date) %>%
+  glimpse
+
+new_df <- new_df %>%
+  mutate(ds = date) %>%
+  mutate(y = daily_cases) %>%
+  select(ds, y) %>%
+  glimpse
+
+#Compare the predicted daily cases, deaths vs actual
+#First, round the predicted yhat (cases) into whole numbers
+predicted <- predicted %>%
+  mutate(yhat = round(yhat, 0)) %>%
+  glimpse
+
+#Calculate MSE, RMSE. MAE
+mse <- mean((new_df$y - predicted$yhat)^2, na.rm = T)
+mse
+
+rmse <- sqrt(mean((new_df$y - predicted$yhat)^2, na.rm = T))
+rmse
+
+mae <- mean(abs(new_df$y - predicted$yhat), na.rm = T)
+mae
+
+#############
+
+#############
+#CART on COVID19 data
+#############
+set.seed(100)
+
+#Split based on time 60:40
+train = us_data[2: round(60*nrow(us_data)/100, 0), ]
+test = us_data[round(60*nrow(us_data)/100 + 1): nrow(us_data), ]
+
+#Train model
+covid.rpart <- rpart(daily_cases ~., data = train)
+covid.rpart
+summary(covid.rpart)
+
+#Check model tree
+prp(covid.rpart, extra = 1)
+
+#Predict
+covid.predict = predict(covid.rpart, newdata = test)
+
+#Calculate MSE, RMSE. MAE
+cmse <- mean((test$daily_cases - covid.predict)^2, na.rm = T)
+cmse
+
+crmse <- sqrt(mean((test$daily_cases - covid.predict)^2, na.rm = T))
+crmse
+
+cmae <- mean(abs(test$daily_cases - covid.predict), na.rm = T)
+cmae
+
+###############################
+
+############
+#Comparison between two models
+############
+
+comparison <- data.frame('Metrics' = c('MSE', 'RMSE', 'MAE'), 
+                         'Prophet' = c(mse, rmse, mae), 
+                         'CART' = c(cmse, crmse, cmae),
+                         'Diff' = c(mse-cmse, rmse-crmse, mae-cmae))
+
+# Conclusion: Prophet performs better in all metrics
+################################
+
 
 
 #lubridate::date(data$date)

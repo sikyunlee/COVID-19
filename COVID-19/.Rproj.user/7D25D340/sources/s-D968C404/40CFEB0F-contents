@@ -1,0 +1,163 @@
+# MGMTMSA 408, Operations Analytics
+# Lecture 2: Logistic Regression
+# In-class example with Framingham Heart Study data.
+
+####### BUILDING THE LOGISTIC REGRESSION MODEL ######
+
+setwd("~//Dropbox/msba499/lecture/Lecture2_Logistic/")
+
+# Load the data:
+framingham = read.csv("framingham.csv")
+
+# Let's take a look at the data:
+str(framingham)
+summary(framingham)
+
+# How many patients are there in total?
+nrow(framingham)
+
+# How many experienced CHD?
+table(framingham$TenYearCHD)
+
+# Most did not experience CHD.
+
+# Before we build our model, we need to do two things.
+
+# First, we are told that education is a categorical/factor variable.
+# Let's convert it to a factor.
+framingham$education = as.factor(framingham$education);
+
+# Now, let's split our data into a training
+# and a testing set.
+# We will use the sample.split command in caTools.
+
+# Install caTools (if not already installed)
+install.packages("caTools")
+
+# Load caTools
+library(caTools)
+
+# Let's all set our random number generator to the same seed,
+# so we obtain the same results
+set.seed(88)
+
+# Now perform the split.
+spl = sample.split(framingham$TenYearCHD, SplitRatio = 0.65)
+# Usually, we want between 50% and 80% of the data in the training set.
+
+# Take a look at spl:
+spl
+
+# Now split the data:
+train = subset(framingham, spl == TRUE)
+test = subset(framingham, spl == FALSE)
+
+# Alternate way:
+train = subset(framingham, spl)
+test = subset(framingham, !spl)
+
+# Yet another way:
+train = framingham[spl,]
+test = framingham[!spl,]
+
+# OK -- we have our data. Let's now run the logistic regression.
+# The function for running a logistic regression model is glm().
+
+framingham.glm = glm(TenYearCHD ~ male + age + education + currentSmoker + cigsPerDay + BPMeds + prevalentStroke + prevalentHyp + diabetes + totChol + sysBP + diaBP + BMI + heartRate + glucose, data = train, family = "binomial")
+
+
+# Remember to include data = train, and family = "binomial".
+# (The latter tells glm to estimate a logistic regression model; glm is 
+# more general than logistic regression.)
+# Can also do family = binomial (without quotation marks).
+
+# A faster way to do the above:
+framingham.glm = glm(TenYearCHD ~ ., data = train, family = "binomial")
+# ~ . means to include everything else as an independent variable
+# (Be careful -- this may include things you do not want!)
+
+# Let's inspect the model:
+summary(framingham.glm)
+
+# Which variables increase the risk of CHD?
+# Which variables decrease the risk of CHD?
+# Which variables are significant?
+# Why is diaBP not significant? Why is diabetes not significant? 
+
+# Let's now make predictions. Predict on the test set:
+predictTest = predict( framingham.glm, newdata = test, type = "response")
+# type = "response" gives us the probabilities. 
+# If we want the raw logits, just leave it out.
+
+# OK. Now how do we evaluate these? (Return to lecture slides.)
+
+
+####### ACCURACY ######
+# Let's now compute the accuracy of our logistic regression model.
+
+# Confusion matrix
+confMat = table( test$TenYearCHD , predictTest > 0.5 )
+confMat
+
+# Accuracy:
+accuracy = (11 + 1078) / (11 + 1078 + 184 + 7)
+accuracy
+# 0.85
+
+# Different way:
+accuracy = sum( diag(confMat)) / nrow(test)
+accuracy
+
+
+# Let's now get the baseline accuracy.
+# First, look at occurrence of CHD in training set:
+table(train$TenYearCHD)
+# Most frequent class is 0
+# => Baseline model should predict zero (no ten year CHD event)
+
+# Now look at test set:
+table(test$TenYearCHD)
+baseline_accuracy = 1085 / (1085 + 195)
+baseline_accuracy
+# 0.8477
+
+# This is not much of an improvement -- so is the model bad?
+# We will come back to this later. (Return to lecture slides).
+
+####### DIFFERENT THRESHOLDS #########
+confMat = table(  test$TenYearCHD, predictTest > 0.7  )
+confMat
+
+confMat = table(  test$TenYearCHD, predictTest > 0.3  )
+confMat
+
+
+####### ROC CURVES / AUC #########
+
+# To produce an ROC curve / compute AUC, we'll
+# need the ROCR package:
+install.packages("ROCR")
+library(ROCR)
+
+# The next three commands will give us the ROC curve
+ROCpred = prediction(predictTest, test$TenYearCHD)
+ROCperf = performance(ROCpred, "tpr", "fpr")
+plot(ROCperf, main = "Receiver Operator Characteristic Curve")
+
+# We can also plot the ROC curve with colors to indicate
+# the thresholds.
+
+plot(ROCperf, main = "Receiver Operator Characteristic Curve", 
+     colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+
+# This last command will compute the AUC
+AUC = as.numeric(performance(ROCpred, "auc")@y.values)
+AUC
+
+
+ROCpred = prediction( as.numeric(runif(nrow(test)) >= 0.85), test$TenYearCHD);
+ROCperf = performance(ROCpred, "tpr", "fpr")
+plot(ROCperf, main = "Receiver Operator Characteristic Curve")
+
+

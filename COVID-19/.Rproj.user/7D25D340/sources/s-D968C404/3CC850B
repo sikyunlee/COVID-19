@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1598177056061.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "3CC850B",
+    "lastKnownWriteTime" : 1586980311,
+    "last_content_update" : 1586980311,
+    "path" : "C:/Users/sikyu/Desktop/UCLA/Class/2020 Spring/Operations Analytics/week3/Lecture3_SCOTUS_script.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "201,8",
+        "scrollLine" : "176"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

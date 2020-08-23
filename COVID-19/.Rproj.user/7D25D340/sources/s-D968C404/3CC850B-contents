@@ -1,0 +1,389 @@
+# MGMTMSA 408, Operations Analytics
+# Lecture 3: CART and Random Forests
+# In-class example on CART and random forests using Justice Stevens data.
+
+
+####### WARM-UP -- A LOGISTIC REGRESSION MODEL ######
+
+# Load the data set  
+stevens = read.csv("stevens.csv")
+str(stevens)
+
+# Variables:
+# Docket = unique identifier for each case
+# Term = year of the case
+# Six independent variables: 
+#  Circuit = the circuit court of origin
+#  Issue = the issue area of the case
+#  Petitioner = the type of petitioner
+#  Respondent = the type of respondent
+#  LowerCourt = the lower court direction
+#  Unconst = whether or not the petitioner argued that a law or practice was unconstitutional
+# Dependent Variable:
+#  Reverse = whether or not Justice Stevens voted to reverse the case (1 = reverse, and 0 = affirm)
+
+
+# Before we split the data, let's remove Docket and Term
+# from our data set, as we will not be using these in our 
+# models.
+stevens$Docket = NULL
+stevens$Term = NULL
+
+# Now, let's split our data:
+library(caTools)
+set.seed(88)
+spl = sample.split(stevens$Reverse, SplitRatio = 0.7)
+stevens.train = stevens[spl,]
+stevens.test = stevens[!spl, ]
+
+
+# As a warm-up, let's estimate a logistic regression
+# model.
+stevens.glm = glm(Reverse ~ . , data = stevens.train, family = "binomial")
+
+# Let's take a look at the model:
+summary(stevens.glm)
+# Is it easy to see how a case maps to a decision by Stevens?
+
+# Predict on the test set:
+stevens.predict = predict(stevens.glm, newdata = stevens.test, type = "response")
+
+# Build the confusion matrix:
+confMat = table(stevens.test$Reverse, stevens.predict >= 0.5)
+confMat
+
+# Compute the accuracy:
+accuracy_glm = sum(diag(confMat))/nrow(stevens.test)
+accuracy_glm
+
+# What is the baseline accuracy?
+table(stevens.train$Reverse)
+# 1 is most frequent value for Reverse, so
+# baseline predicts 1 for all observations.
+table(stevens.test$Reverse)
+
+# 77 for 0, 93 for 1, so baseline accuracy is:
+baseline_accuracy = 93 / (77 + 93)
+baseline_accuracy
+
+# A modest improvement over the baseline.
+
+# Let's compute AUC as well.
+library(ROCR)
+pred = prediction(stevens.predict, stevens.test$Reverse)
+auc = as.numeric(performance(pred, "auc")@y.values)
+auc
+# AUC is fair - 0.682.
+
+####### BUILDING A CLASSIFICATION TREE MODEL #######
+
+# Now, let's build our classification tree model.
+# First, we need to install the package rpart, and load it
+# install.packages("rpart")
+library(rpart)
+
+# Also, install rpart.plot, in order to access prp()
+# install.packages("rpart.plot")
+library(rpart.plot)
+
+# Let's now build our CART model:
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class")
+
+# The first two arguments are the same as for lm() and glm().
+# The third argument tells CART to build a classification tree.
+# If the dependent variable is numeric and we leave method="class" out, then
+# rpart will by default build a regression tree. In this case, Reverse
+# is a numeric variable, so either we need to give method = "class", or
+# we need to convert Reverse to a factor before hand. 
+
+# Open up stevens.rpart:
+stevens.rpart
+# Not very helpful...
+
+# Try summary() instead:
+summary(stevens.rpart)
+# Also not helpful...
+
+# Plot tree using prp():
+prp(stevens.rpart)
+# Much better!
+
+# prp() allows us to plot CART models.
+# prp() has a parameter called "extra", which can allow us to plot 
+# additional things. For example, extra = 6 will also plot
+# the proportion of observations in the leaf that belong to class 1.
+prp(stevens.rpart, extra= 6)
+
+# The values under the leaves are the predicted probabilities of 
+# class 1 when an observation is mapped to those leaves. 
+
+# Another example: extra = 1 will plot the raw number of observations
+# belonging to each class that fall in each leaf.
+prp(stevens.rpart, extra= 1)
+
+# (For more information, run ?prp)
+
+
+# We can also provide parameters to rpart(). The three main parameters for
+# CART are:
+# - minbucket: the minimum number of observations that can be in any leaf
+# - minsplit: the minimum number of observations that can be in a leaf
+# for a split to be considered on that leaf
+# - cp: complexity parameter: how much lack-of-fit must improve for a split
+# to be considered.
+
+# Let's try playing with cp. The default value is cp = 0.01.
+# What happens if we set cp to be larger, say 0.02?
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class", cp = 0.02)
+prp(stevens.rpart)
+
+# Try cp = 0.05:
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class", cp = 0.05)
+prp(stevens.rpart)
+
+# Try cp = 0.5:
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class", cp = 0.5)
+prp(stevens.rpart)
+
+# What tree is this?
+
+# What happens if we make it smaller than 0.01? 
+# For example, try cp = 0.001:
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class", cp = 0.001)
+prp(stevens.rpart)
+
+# What happens if we set cp = 0?
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class", cp = 0)
+prp(stevens.rpart)
+
+# Tree becomes deeper as cp gets smaller; in theory, for cp = 0, we would grow
+# the tree until each observation is in its own bucket. The only thing that
+# stops this from happening are minsplit and minbucket.
+
+# minbucket and minsplit will have similar effects (lower values -> deeper trees).
+# Going forward, let's use the CART model with minbucket= 25:
+stevens.rpart = rpart( Reverse ~ ., data = stevens.train, method = "class", minbucket = 25)
+prp(stevens.rpart)
+
+
+
+# Let's now make predictions.
+# Run the predict function, with type = "class"
+stevens.predict = predict(stevens.rpart, newdata = stevens.test, type = "class")
+
+# Inspect stevens.predict:
+head(stevens.predict)
+
+# Using type = "class" will make an actual prediction of the class. 
+# Let's construct the confusion matrix: (note that no thresholding is
+# required)
+confMat = table(stevens.test$Reverse, stevens.predict)
+confMat
+
+accuracy_rpart = sum(diag(confMat)) / nrow(stevens.test)
+accuracy_rpart
+
+# Our accuracy is 0.641 -- slightly higher than logistic regression.
+
+# What about AUC / ROC curve?
+# To get AUC, we need predictions of the probability of each observation
+# being in class 1. How do we get those?
+
+# Let's run predict(), but leave off type = "class":
+stevens.predict = predict(stevens.rpart, newdata = stevens.test)
+stevens.predict
+
+# What are these values?
+
+# We need the second column (probability of class 1):
+stevens.predict = stevens.predict[,2]
+
+# Now, let's compute AUC in the usual way:
+pred = prediction(stevens.predict, stevens.test$Reverse)
+AUC = as.numeric( performance(pred, "auc")@y.values)
+AUC
+
+# AUC is slightly lower than logistic (0.66 vs. 0.682)
+
+# What about the ROC curve? 
+perf = performance(pred, "tpr","fpr")
+plot(perf, main = "Receiver Operator Characteristic Curve")
+
+# It is perhaps not so easy to see, but the ROC curve
+# for a CART model will usually have a very jaggedy/piecewise
+# linear shape. (The reason is that as we sweep the threshold from 0
+# to 1, the TPR/FPR will change whenever our threshold goes over the
+# predicted probability of one of the leaves.)
+
+# (Return to slides.)
+
+####### BUILDING A RANDOM FOREST MODEL ######
+
+# We'll now build our random forest model.
+# First, we need to install the randomForest package:
+# install.packages("randomForest")
+library(randomForest)
+
+# Next, we need will run the randomForest() command. We'll set
+# the seed to 99 beforehand to ensure we all get the same results:
+set.seed(99)
+stevens.rf = randomForest(Reverse ~ . , data = stevens.train)
+
+# We got a warning message: "The response has five or fewer unique values..."
+# What happened?
+
+# The reason for this is that randomForest can be used for either
+# classification, or regression. Usually, it can figure out what
+# you are trying to do based on the type of the dependent variable
+# (if it's a factor, it assumes you want to do classification; 
+# if it's numeric, it assumes you want to do regression). In our case
+# Reverse is a numeric variable, and was not converted to a factor.
+
+# We can rectify this by converting Reverse to a factor:
+stevens.train$Reverse = as.factor(stevens.train$Reverse)
+
+# Try again now:
+set.seed(99)
+stevens.rf = randomForest(Reverse ~ . , data = stevens.train)
+
+# No warning this time.
+
+
+# Before we make predictions, let's examine the variable 
+# importances. We can access them using the importance()
+# function:
+importance(stevens.rf)
+
+# The importances shown are based on the impurity metric.
+# (MeanDecreaseGini = mean decrease in Gini index over all splits
+# in all trees; the Gini index is a metric for how impure a node is,
+# i.e., how far away it is from containing observations that are all of
+# class 0 or class 1).
+
+# A nicer way to visualize these is to use varImpPlot():
+varImpPlot(stevens.rf)
+
+# We can see the court from which the case originated (Circuit) seems to 
+# be the most important in this random forest model.
+
+# To get the permutation-based importance metric, we need to run the 
+# randomForest with importance = TRUE:
+set.seed(99)
+stevens.rf = randomForest(Reverse ~ . , data = stevens.train, importance = TRUE)
+
+# Try varImpPlot() again:
+varImpPlot(stevens.rf)
+
+# Both are plotted. To only get the permutation importances,
+# pass "type = 1"
+varImpPlot(stevens.rf, type = 1)
+
+# To get the impurity importances, pass type = 2:
+varImpPlot(stevens.rf, type = 2)
+
+# These two importance metrics need not be the same, though
+# often they are quite similar. 
+
+
+
+# Let's now make predictions on the test set:
+stevens.predict = predict(stevens.rf, newdata = stevens.test)
+
+# Note that if the dep. var. was a factor, then predict() for 
+# a randomForest object will automatically give us the classifications.
+head(stevens.predict)
+
+# Our confusion matrix is:
+confMat = table(stevens.test$Reverse, stevens.predict)
+confMat
+
+accuracy_rf = sum(diag(confMat))/nrow(stevens.test)
+accuracy_rf
+
+# Higher than CART and logistic regression.
+
+# How do we get probability predictions from the model?
+# Add type = "prob" to predict()
+stevens.predict = predict(stevens.rf, newdata = stevens.test, type = "prob")
+stevens.predict
+
+# As with CART, gives two columns of probabilities 
+# (one for each class)
+# Keep the second column:
+stevens.predict = stevens.predict[,2]
+
+# Compute AUC:
+pred = prediction(stevens.predict, stevens.test$Reverse)
+AUC = as.numeric( performance(pred, "auc")@y.values)
+AUC
+
+# Slightly higher than CART. In general, there can be a large
+# difference between these two. 
+
+# Plot the ROC curve:
+perf = performance(pred, "tpr","fpr")
+plot(perf, main = "Receiver Operator Characteristic Curve")
+
+# (Return to slides) 
+
+####### PARAMETER TUNING / CROSS VALIDATION #######
+
+# We saw earlier that tweaking cp resulted in different trees.
+# We will now see how to use cross validation to pick the optimal
+# value of cp.
+
+# Load e1071 and caret:
+# install.packages("e1071")
+#library(e1071)
+# install.packages("caret")
+library(caret)
+
+# caret provides a function called train() that allows many 
+# different types of models to be tuned with k-fold cross validation.
+
+# To use it, we first need to specify to use k-fold cross validation.
+# We'll set k = 10. 
+folds = trainControl(method = "cv", number = 10)
+
+# Next, we provide a grid of cp values to evaluate:
+cpValues = expand.grid(.cp = seq(0.01,0.5,0.01)) 
+
+# seq(a,b,c) will produce all values from a to b in increments
+# of c. 
+
+# Finally, we call the train() function:
+set.seed(100)
+train.result = train(Reverse ~ ., data = stevens.train, method = "rpart", trControl = folds, tuneGrid = cpValues)
+
+# Inspect train.result:
+train.result
+
+# Optimal cp value was 0.26. 
+
+# If we pass train.result to plot, we get a nice
+# plot of cross-validated accuracy (i.e., the average accuracy on 
+# the validation fold, taken over all 10 folds) as a function of cp:
+plot(train.result)
+
+# To directly retrieve the optimal value, use bestTune:
+train.result$bestTune
+
+# We can now run rpart() again, giving it this value of cp.
+stevens.rpart.cv = rpart(Reverse ~ ., data = stevens.train, method = "class", cp = 0.26)
+prp(stevens.rpart.cv)
+
+
+# The test set accuracy of this cross validated model:
+stevens.predict.cv = predict(stevens.rpart.cv, newdata = stevens.test, type = "class")
+confMat = table(stevens.test$Reverse, stevens.predict.cv)
+confMat
+
+accuracy_rpart_cv = sum(diag(confMat)) / nrow(stevens.test)
+accuracy_rpart_cv
+# 0.6411
+
+# Same as the model we tested before (with minbucket = 25).
+# In general, cross validation should help with our final test
+# set accuracy. 
+
+
